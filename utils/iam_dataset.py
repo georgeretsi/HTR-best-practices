@@ -52,7 +52,12 @@ class IAMDataset(WordLineDataset):
                     elif level == 'line':
                         line_name = pathlist[-1]
                     form_name = '-'.join(line_name.split('-')[:-1])
+                    
                     #if (info[1] != 'ok') or (form_name not in valid_set):
+                    
+                    if (level == 'word') and (info[1] != 'ok'):
+                        continue
+                    
                     if (form_name not in valid_set):
                         #print(line_name)
                         continue
