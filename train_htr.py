@@ -257,7 +257,7 @@ def test_both(epoch, tset='test'):
 
     tdecs_rnn = []
     tdecs_cnn = []
-    tdecs_merge = []
+    #tdecs_merge = []
     transcrs = []
     for (img, transcr) in loader:
         img = Variable(img.cuda(gpu_id))
@@ -270,13 +270,13 @@ def test_both(epoch, tset='test'):
         tdec = aux_o.argmax(2).permute(1, 0).cpu().numpy().squeeze()
         tdecs_cnn += [tdec]
 
-        tdec = (o + aux_o).argmax(2).permute(1, 0).cpu().numpy().squeeze()
-        tdecs_merge += [tdec]
+        #tdec = (o + aux_o).argmax(2).permute(1, 0).cpu().numpy().squeeze()
+        #tdecs_merge += [tdec]
 
         transcrs += list(transcr)
 
-    cases = ['rnn', 'cnn', 'merge']
-    tdecs_list = [np.concatenate(tdecs_rnn), np.concatenate(tdecs_cnn), np.concatenate(tdecs_merge)]
+    cases = ['rnn', 'cnn'] #, 'merge']
+    tdecs_list = [np.concatenate(tdecs_rnn), np.concatenate(tdecs_cnn)] #, np.concatenate(tdecs_merge)]
 
     for case, tdecs in zip(cases, tdecs_list):
         logger.info('Case: %s', case)
