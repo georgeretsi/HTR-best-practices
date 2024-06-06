@@ -1,0 +1,38 @@
+resume:
+save: './temp.pt'
+
+device: 'cuda:0'
+
+# datasets
+data:
+  path: './data/IAM/processed_lines'
+
+# preprocessing
+preproc:
+  image_height: 128
+  image_width: 1024
+
+# architecture
+arch: 
+  cnn_cfg: [[2, 64], 'M', [3, 128], 'M', [2, 256]]
+  head_type: 'both'  # select from 'both' (rnn + cnn shortcut), 'rnn', 'cnn'
+  rnn_type: 'lstm'
+  rnn_layers: 3
+  rnn_hidden_size: 256
+  flattening: 'maxpool'
+  stn: False
+
+# training
+train:
+  lr: 1e-3
+  num_epochs: 800
+  batch_size: 16
+  scheduler: 'mstep'  # right now only 'mstep' is supported, i.e. multistep
+  save_every_k_epochs: 50
+  num_workers: 8
+
+# evaluation
+eval:
+  batch_size: 32
+  num_workers: 8
+  wer_mode: 'tokenizer' # select from 'tokenizer', 'space'

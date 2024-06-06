@@ -37,17 +37,18 @@ class CNN(nn.Module):
         self.k = 1
         self.flattening = flattening
 
-        self.features = nn.ModuleList([nn.Conv2d(1, 32, 7, [2, 2], 3), nn.ReLU()])
+        self.features = nn.ModuleList([nn.Conv2d(1, 32, 7, [4, 2], 3), nn.ReLU()])
         in_channels = 32
         cntm = 0
         cnt = 1
+
         for m in cnn_cfg:
             if m == 'M':
                 self.features.add_module('mxp' + str(cntm), nn.MaxPool2d(kernel_size=2, stride=2))
                 cntm += 1
             else:
-                for i in range(m[0]):
-                    x = m[1]
+                for i in range(int(m[0])):
+                    x = int(m[1])
                     self.features.add_module('cnv' + str(cnt), BasicBlock(in_channels, x,))
                     in_channels = x
                     cnt += 1
@@ -71,46 +72,35 @@ def weight_init(m):
 
 
 class CTCtopC(nn.Module):
-    def __init__(self, input_size, head_cfg, nclasses):
+    def __init__(self, input_size, nclasses, dropout=0.0):
         super(CTCtopC, self).__init__()
 
-        hidden_size, num_layers = head_cfg
-
-        self.temporal_i = nn.Sequential(
-            nn.Conv2d(input_size, hidden_size, kernel_size=(1,5), stride=(1,1), padding=(0,2)),
-            nn.BatchNorm2d(hidden_size), nn.ReLU(), nn.Dropout(.25),
-        )
-
-        list = [
-            nn.Sequential(
-                nn.Conv2d(hidden_size, hidden_size, kernel_size=(1, 5), stride=(1, 1), padding=(0, 2)),
-                nn.BatchNorm2d(hidden_size), nn.ReLU(), nn.Dropout(.25),
-            ) for _ in range(num_layers)
-        ]
-
-        self.temporal_m = nn.ModuleList(list)
-
-        self.temporal_o = nn.Conv2d(hidden_size, nclasses, kernel_size=(1, 5), stride=1, padding=(0, 2))
-
+        self.dropout = nn.Dropout(dropout)
+        self.cnn_top = nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
 
     def forward(self, x):
+    
+        x = self.dropout(x)
 
-        y = self.temporal_i(x)
-
-        for f in self.temporal_m:
-            y = f(y)
-
-        y = self.temporal_o(y)
+        y = self.cnn_top(x)
         y = y.permute(2, 3, 0, 1)[0]
         return y
 
+
 class CTCtopR(nn.Module):
-    def __init__(self, input_size, rnn_cfg, nclasses):
+    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru'):
         super(CTCtopR, self).__init__()
 
         hidden, num_layers = rnn_cfg
 
-        self.rec = nn.LSTM(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
+        if rnn_type == 'gru':
+            self.rec = nn.GRU(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
+        elif rnn_type == 'lstm':
+            self.rec = nn.LSTM(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
+        else:
+            print('problem! - no such rnn type is defined')
+            exit()
+        
         self.fnl = nn.Sequential(nn.Dropout(.2), nn.Linear(2 * hidden, nclasses))
 
     def forward(self, x):
@@ -122,24 +112,30 @@ class CTCtopR(nn.Module):
         return y
 
 class CTCtopB(nn.Module):
-    def __init__(self, input_size, rnn_cfg, nclasses):
+    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru'):
         super(CTCtopB, self).__init__()
 
         hidden, num_layers = rnn_cfg
 
-        self.rec = nn.LSTM(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
-        self.fnl = nn.Sequential(nn.Dropout(.2), nn.Linear(2 * hidden, nclasses))
+        if rnn_type == 'gru':
+            self.rec = nn.GRU(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
+        elif rnn_type == 'lstm':
+            self.rec = nn.LSTM(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
+        else:
+            print('problem! - no such rnn type is defined')
+            exit()
+        
+        self.fnl = nn.Sequential(nn.Dropout(.5), nn.Linear(2 * hidden, nclasses))
 
-        self.att = nn.Sequential(nn.Dropout(.5), nn.Linear(2 * hidden, nclasses), nn.Sigmoid())
-
-        self.cnn = nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
+        self.cnn = nn.Sequential(nn.Dropout(.5), 
+                                 nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
+        )
 
     def forward(self, x):
 
         y = x.permute(2, 3, 0, 1)[0]
         y = self.rec(y)[0]
-        #a = self.att(y)
-        #y = (a * self.fnl(y) + (1 - a) * self.cnn(x))
+
         y = self.fnl(y)
 
         if self.training:
@@ -148,61 +144,33 @@ class CTCtopB(nn.Module):
             return y, self.cnn(x).permute(2, 3, 0, 1)[0]
 
 
-class STN(nn.Module):
-
-    def __init__(self):
-        super(STN, self).__init__()
-
-        cfg = [(2, 16), 'M', (2, 32), 'M', (2, 64)]
-        self.cnn = CNN(cfg)
-
-        self.aff_last = nn.Linear(cfg[-1][-1], 6)
-        self.aff_last.weight.data *= 0.1
-        self.aff_last.bias.data *= 0.1
-
-        self.ref_aff = torch.Tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-
-
-    def forward(self, x):
-        xd = x
-        y = self.cnn(x, reduce=False)
-
-        y = F.adaptive_avg_pool2d(y, [1, 1])
-        y_aff = self.aff_last(y.view(x.size(0), -1))
-
-        aff = self.ref_aff.to(x.device).unsqueeze(0).repeat(x.size(0), 1, 1)
-        #aff[:, :, :2] += y_aff.view(-1, 2, 2)
-        aff += y_aff.view(-1, 2, 3)
-
-        grid = F.affine_grid(aff, x.size())
-        xd = F.grid_sample(xd, grid, padding_mode='border')
-
-        return xd
-
 class HTRNet(nn.Module):
-    def __init__(self, cnn_cfg, head_cfg, nclasses, head='cnn', stn=False, flattening='maxpool'):
+    def __init__(self, arch_cfg, nclasses):
         super(HTRNet, self).__init__()
 
-        if stn: 
-            self.stn = STN()
+        if arch_cfg.stn: 
+            raise NotImplementedError('Spatial Transformer Networks not implemented - you can easily build your own!')
+            #self.stn = STN()
         else:
             self.stn = None
 
-        self.features = CNN(cnn_cfg, flattening=flattening)
+        cnn_cfg = arch_cfg.cnn_cfg
+        self.features = CNN(arch_cfg.cnn_cfg, flattening=arch_cfg.flattening)
 
-        if flattening=='maxpool':
+        if arch_cfg.flattening=='maxpool' or arch_cfg.flattening=='avgpool':
             hidden = cnn_cfg[-1][-1]
-        elif flattening=='concat':
+        elif arch_cfg.flattening=='concat':
             hidden = 2 * 8 * cnn_cfg[-1][-1]
         else:
-            print('problem!')
+            print('problem! - no such flattening is defined')
 
+        head = arch_cfg.head_type
         if head=='cnn':
-            self.top = CTCtopC(hidden, head_cfg, nclasses)
+            self.top = CTCtopC(hidden, nclasses)
         elif head=='rnn':
-            self.top = CTCtopR(hidden, head_cfg, nclasses)
+            self.top = CTCtopR(hidden, (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers), nclasses, rnn_type=arch_cfg.rnn_type)
         elif head=='both':
-            self.top = CTCtopB(hidden, head_cfg, nclasses)
+            self.top = CTCtopB(hidden, (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers), nclasses, rnn_type=arch_cfg.rnn_type)
 
     def forward(self, x):
 
@@ -213,8 +181,3 @@ class HTRNet(nn.Module):
         y = self.top(y)
 
         return y
-
-
-def set_bn_eval(m):
-    if isinstance(m, nn.modules.batchnorm._BatchNorm):
-        m.eval()
