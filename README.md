@@ -35,7 +35,7 @@ For the line-level setup, which is currently supported by this repo, you only ne
 
 Then, we can create a line-level instatiation of the dataset through the script:
 ```bash
-python prepare_iam.py $mypath$/IAM/forms/ $mypath$/gretsi/IAM/xml/ ./data/IAM/splits/ ./data/IAM/processed_lines
+python prepare_iam.py $mypath$/IAM/forms/ $mypath$/IAM/xml/ ./data/IAM/splits/ ./data/IAM/processed_lines
 ```
 
 where $mypath$/IAM is the path where the different IAM files are saved. The splits are provided in the local path ./data. Finally, the last argument is the output folder.
