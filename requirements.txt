@@ -1,4 +1,4 @@
-albumentations==1.4.8
+albumentations==1.4.21
 imageio==2.34.1
 nltk==3.8.1
 numpy==1.26.4
@@ -8,3 +8,4 @@ scikit-image==0.22.0
 scipy==1.13.1
 torch==2.0.1
 tqdm==4.64.0
+editdistanc==0.8.1
